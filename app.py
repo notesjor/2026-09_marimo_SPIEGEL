@@ -133,7 +133,27 @@ def _(maskform_input, mo):
 
 
 @app.cell
-def _(df, maskform_input, mo, pl, px, q1, q2, spiegel_select):
+def _(maskform_input, mo, q1):
+    mo.stop(not maskform_input.value)
+
+    checkbox = None
+    if len(q1) < 10:
+        checkbox = mo.ui.checkbox(label="Werte separieren?")
+
+    checkbox
+    return (checkbox,)
+
+
+@app.cell
+def _(checkbox):
+    separate = False
+    if checkbox != None:
+        separate = checkbox.value
+    return (separate,)
+
+
+@app.cell
+def _(df, maskform_input, mo, pl, px, q1, q2, separate, spiegel_select):
     mo.stop(not maskform_input.value)
 
     if spiegel_select.value == "Bitte auswählen...":
@@ -148,18 +168,22 @@ def _(df, maskform_input, mo, pl, px, q1, q2, spiegel_select):
     else:
         df_filtered = df
 
-    tmp = (
+    if separate:
+        tmp = (
+        df_filtered.filter(pl.col("Wort").is_in(q1 + q2)))
+    else:
+        tmp = (
         df_filtered.filter(pl.col("Wort").is_in(q1 + q2))
-        .with_columns(
-            pl.when(pl.col("Wort").is_in(q1))
-            .then(pl.lit("mask"))
-            .otherwise(pl.lit("fem"))
-            .alias("Wort")
+            .with_columns(
+                pl.when(pl.col("Wort").is_in(q1))
+                .then(pl.lit("mask"))
+                .otherwise(pl.lit("fem"))
+                .alias("Wort")
+            )
+            .group_by(["Jahr", "Wort"])
+            .agg(pl.sum("Frequenz"))
         )
-        .group_by(["Jahr", "Wort"])
-        .agg(pl.sum("Frequenz"))
-    )
-    
+
     tmp_with_trend = (
         tmp.sort(["Wort", "Jahr"])
         .with_columns(
@@ -180,7 +204,7 @@ def _(df, maskform_input, mo, pl, px, q1, q2, spiegel_select):
         title=f"Frequenzverlauf",
         labels={"Jahr": "Jahr", "Frequenz": "Frequenz (ppm)", "Wort": "Wort"},
     )
-    
+
     fig_trend = px.line(
         tmp_with_trend,
         x="Jahr",
@@ -189,9 +213,9 @@ def _(df, maskform_input, mo, pl, px, q1, q2, spiegel_select):
         color_discrete_map={"mask": "#4d70f0", "fem": "#e04c5e"},
     )
     fig_trend.update_traces(line=dict(width=3, dash="solid"), opacity=0.8)
-    
+
     fig.add_traces(fig_trend.data)
-    
+
     fig
     return
 
